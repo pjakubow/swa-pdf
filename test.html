@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Processor Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .upload-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .file-input {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .upload-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .upload-btn:hover {
+            background-color: #0056b3;
+        }
+        .upload-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #cce7ff;
+            color: #004085;
+            border: 1px solid #99d3ff;
+        }
+        .hidden {
+            display: none;
+        }
+        .health-check {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .health-btn {
+            background-color: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .health-btn:hover {
+            background-color: #218838;
+        }
+        .instructions {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .instructions ul {
+            margin: 10px 0;
+        }
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Processor Test Page</h1>
+        
+        <div class="health-check">
+            <button class="health-btn" onclick="checkHealth()">Check Server Health</button>
+        </div>
+
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ul>
+                <li>This tool extracts the <strong>second page</strong> from your PDF file</li>
+                <li>Upload a PDF file that has at least 2 pages</li>
+                <li>The processed PDF will be automatically downloaded</li>
+                <li>Maximum file size: 10MB</li>
+                <li>Only PDF files are accepted</li>
+            </ul>
+        </div>
+
+        <div class="upload-section">
+            <h3>Upload PDF File</h3>
+            <input type="file" id="pdfFile" accept=".pdf" class="file-input">
+            <br>
+            <button class="upload-btn" onclick="uploadPDF()">Process PDF</button>
+        </div>
+
+        <div id="status" class="status hidden"></div>
+    </div>
+
+    <script>
+        async function checkHealth() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                statusDiv.className = 'status info';
+                statusDiv.textContent = 'Checking server health...';
+                statusDiv.classList.remove('hidden');
+
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `✓ ${data.message}`;
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = `✗ Health check failed: ${data.error || 'Unknown error'}`;
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `✗ Cannot connect to server. Make sure the server is running on the correct port.`;
+            }
+        }
+
+        async function uploadPDF() {
+            const fileInput = document.getElementById('pdfFile');
+            const statusDiv = document.getElementById('status');
+            const uploadBtn = document.querySelector('.upload-btn');
+            
+            if (!fileInput.files[0]) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please select a PDF file first.';
+                statusDiv.classList.remove('hidden');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            
+            // Validate file type
+            if (file.type !== 'application/pdf') {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please select a valid PDF file.';
+                statusDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Validate file size (10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'File is too large. Maximum size is 10MB.';
+                statusDiv.classList.remove('hidden');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('pdf', file);
+
+            try {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Processing...';
+                
+                statusDiv.className = 'status info';
+                statusDiv.textContent = 'Uploading and processing PDF... This may take a few moments.';
+                statusDiv.classList.remove('hidden');
+
+                const response = await fetch('/process-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `processed-${file.name}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✓ PDF processed successfully! Download should start automatically.';
+                } else {
+                    const errorData = await response.json();
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = `✗ Error: ${errorData.error}${errorData.details ? '\n' + errorData.details : ''}`;
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `✗ Network error: ${error.message}`;
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Process PDF';
+            }
+        }
+
+        // Auto-check health on page load
+        window.addEventListener('load', checkHealth);
+    </script>
+</body>
+</html>
