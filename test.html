@@ -107,12 +107,34 @@
         .instructions li {
             margin: 5px 0;
         }
+        .api-key-section {
+            background-color: #fff3cd;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeaa7;
+        }
+        .api-key-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>PDF Processor Test Page</h1>
         
+        <div class="api-key-section">
+            <h3>⚠️ API Key Required</h3>
+            <p>This API requires authentication. Please enter your API key:</p>
+            <input type="password" id="apiKey" placeholder="Enter your API key" class="api-key-input">
+            <p><small>Default API key: <code>your-secret-api-key-here</code> (change this in .env file)</small></p>
+        </div>
+
         <div class="health-check">
             <button class="health-btn" onclick="checkHealth()">Check Server Health</button>
         </div>
@@ -120,6 +142,7 @@
         <div class="instructions">
             <h3>Instructions:</h3>
             <ul>
+                <li>Enter your API key above first</li>
                 <li>This tool extracts the <strong>second page</strong> from your PDF file</li>
                 <li>Upload a PDF file that has at least 2 pages</li>
                 <li>The processed PDF will be automatically downloaded</li>
@@ -139,27 +162,44 @@
     </div>
 
     <script>
+        function getApiKey() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                throw new Error('API key is required');
+            }
+            return apiKey;
+        }
+
         async function checkHealth() {
             const statusDiv = document.getElementById('status');
             
             try {
+                const apiKey = getApiKey();
+                
                 statusDiv.className = 'status info';
                 statusDiv.textContent = 'Checking server health...';
                 statusDiv.classList.remove('hidden');
 
-                const response = await fetch('/health');
+                const response = await fetch('/health', {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    }
+                });
                 const data = await response.json();
                 
                 if (response.ok) {
                     statusDiv.className = 'status success';
                     statusDiv.textContent = `✓ ${data.message}`;
+                } else if (response.status === 401 || response.status === 403) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = `✗ Authentication failed: ${data.error}`;
                 } else {
                     statusDiv.className = 'status error';
                     statusDiv.textContent = `✗ Health check failed: ${data.error || 'Unknown error'}`;
                 }
             } catch (error) {
                 statusDiv.className = 'status error';
-                statusDiv.textContent = `✗ Cannot connect to server. Make sure the server is running on the correct port.`;
+                statusDiv.textContent = `✗ ${error.message}`;
             }
         }
 
@@ -168,35 +208,37 @@
             const statusDiv = document.getElementById('status');
             const uploadBtn = document.querySelector('.upload-btn');
             
-            if (!fileInput.files[0]) {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = 'Please select a PDF file first.';
-                statusDiv.classList.remove('hidden');
-                return;
-            }
-
-            const file = fileInput.files[0];
-            
-            // Validate file type
-            if (file.type !== 'application/pdf') {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = 'Please select a valid PDF file.';
-                statusDiv.classList.remove('hidden');
-                return;
-            }
-
-            // Validate file size (10MB)
-            if (file.size > 10 * 1024 * 1024) {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = 'File is too large. Maximum size is 10MB.';
-                statusDiv.classList.remove('hidden');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('pdf', file);
-
             try {
+                const apiKey = getApiKey();
+                
+                if (!fileInput.files[0]) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Please select a PDF file first.';
+                    statusDiv.classList.remove('hidden');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                
+                // Validate file type
+                if (file.type !== 'application/pdf') {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Please select a valid PDF file.';
+                    statusDiv.classList.remove('hidden');
+                    return;
+                }
+
+                // Validate file size (10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'File is too large. Maximum size is 10MB.';
+                    statusDiv.classList.remove('hidden');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('pdf', file);
+
                 uploadBtn.disabled = true;
                 uploadBtn.textContent = 'Processing...';
                 
@@ -206,6 +248,9 @@
 
                 const response = await fetch('/process-pdf', {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    },
                     body: formData
                 });
 
@@ -226,20 +271,27 @@
                     statusDiv.textContent = '✓ PDF processed successfully! Download should start automatically.';
                 } else {
                     const errorData = await response.json();
-                    statusDiv.className = 'status error';
-                    statusDiv.textContent = `✗ Error: ${errorData.error}${errorData.details ? '\n' + errorData.details : ''}`;
+                    if (response.status === 401 || response.status === 403) {
+                        statusDiv.className = 'status error';
+                        statusDiv.textContent = `✗ Authentication failed: ${errorData.error}`;
+                    } else {
+                        statusDiv.className = 'status error';
+                        statusDiv.textContent = `✗ Error: ${errorData.error}${errorData.details ? '\n' + errorData.details : ''}`;
+                    }
                 }
             } catch (error) {
                 statusDiv.className = 'status error';
-                statusDiv.textContent = `✗ Network error: ${error.message}`;
+                statusDiv.textContent = `✗ ${error.message}`;
             } finally {
                 uploadBtn.disabled = false;
                 uploadBtn.textContent = 'Process PDF';
             }
         }
 
-        // Auto-check health on page load
-        window.addEventListener('load', checkHealth);
+        // Set default API key on page load
+        window.addEventListener('load', () => {
+            document.getElementById('apiKey').value = 'your-secret-api-key-here';
+        });
     </script>
 </body>
 </html>
